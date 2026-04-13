@@ -262,7 +262,7 @@ class MoemailClient:
 # 遍歷郵件
             for idx, msg in enumerate(messages, 1):
                 
-                # 1. 修復：兼容 List API 可能存在的嵌套結構 {"message": {"id": ...}}
+                # 1. 修復：兼容 List API 可能存在的嵌套結構
                 if not msg.get("id") and "message" in msg and isinstance(msg["message"], dict):
                     msg = msg["message"]
 
@@ -271,19 +271,16 @@ class MoemailClient:
                     self._log("warning", f"⚠️ 跳過無效郵件 (找不到 ID): {msg}")
                     continue
 
-                # 2. 降維打擊：刪除所有時間與標題過濾！
-                # 臨時信箱是剛生成的，裡面的信 100% 是目標信件，直接放行即可。
-
-                # 優先從郵件列表的 content 字段提取驗證碼
+                # 2. 尝试从邮件列表的 content 字段极速提取（无需多发一次请求）
                 list_content = msg.get("content") or ""
                 if list_content:
                     code = extract_verification_code(list_content)
                     if code:
-                        self._log("info", f"✅ 找到驗證碼: {code}")
+                        self._log("info", f"✅ 從郵件列表成功提取驗證碼: {code}")
                         return code
 
-                # 如果列表沒有 content，則獲取郵件詳情
-                self._log("info", f"🔍 正在讀取郵件 {idx}/{len(messages)} 詳情...")
+                # 3. 强制兜底：如果列表没有 content，或者上面提取失败，立刻拉取详情
+                self._log("info", f"🔍 列表提取失敗，正在拉取郵件 {idx}/{len(messages)} 詳情...")
                 detail_res = self._request(
                     "GET",
                     f"{self.base_url}/api/emails/{self.email_id}/{msg_id}",
@@ -308,18 +305,15 @@ class MoemailClient:
                 if isinstance(text_content, list):
                     text_content = "".join(str(item) for item in text_content)
 
-                # 3. 防止粘連，加入換行符
+                # 防止粘連，加入換行符
                 content = f"{text_content}\n\n{html_content}"
                 if content.strip():
                     code = extract_verification_code(content)
                     if code:
-                        self._log("info", f"✅ 找到驗證碼: {code}")
+                        self._log("info", f"✅ 從郵件詳情找到驗證碼: {code}")
                         return code
                     else:
-                        self._log("info", f"❌ 郵件 {idx} 中未找到驗證碼")
-
-            self._log("warning", "⚠️ 所有邮件中均未找到验证码")
-            return None
+                        self._log("info", f"❌ 郵件 {idx} 詳情中未找到驗證碼")
 
         except Exception as e:
             self._log("error", f"❌ 获取验证码异常: {e}")

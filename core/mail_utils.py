@@ -8,7 +8,8 @@ def extract_verification_code(text: str) -> Optional[str]:
         return None
 
     # 策略1: 上下文关键词匹配（中英文冒号）
-    context_pattern = r"(?:验证码|code|verification|passcode|pin).*?[:：]\s*([A-Za-z0-9]{4,8})\b"
+    # 增加对繁体中文的兼容
+    context_pattern = r"(?:验证码|驗證碼|code|verification|passcode|pin).*?[:：]\s*([A-Za-z0-9]{4,8})\b"
     match = re.search(context_pattern, text, re.IGNORECASE)
     if match:
         candidate = match.group(1)

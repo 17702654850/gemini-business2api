@@ -315,9 +315,6 @@ class MoemailClient:
                     else:
                         self._log("info", f"❌ 郵件 {idx} 詳情中未找到驗證碼")
 
-            self._log("warning", "⚠️ 所有邮件中均未找到验证码")
-            return None
-
         except Exception as e:
             self._log("error", f"❌ 获取验证码异常: {e}")
             return None

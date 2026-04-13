@@ -259,50 +259,47 @@ class MoemailClient:
                 messages_with_time.sort(key=lambda item: item[1] or datetime.min, reverse=True)
                 messages = [item[0] for item in messages_with_time]
 
-            # 遍历邮件
+# 遍歷郵件
             for idx, msg in enumerate(messages, 1):
+                
+                # 1. 修復：兼容 List API 可能存在的嵌套結構 {"message": {"id": ...}}
+                if not msg.get("id") and "message" in msg and isinstance(msg["message"], dict):
+                    msg = msg["message"]
+
                 msg_id = msg.get("id")
                 if not msg_id:
+                    self._log("warning", f"⚠️ 跳過無效郵件 (找不到 ID): {msg}")
                     continue
 
-                # 时间过滤
-                if since_time:
-                    msg_time = _parse_message_time(msg)
-                    if msg_time:
-                        from datetime import timedelta
-                        # 修复 3：增加 5 分钟容错，防止服务器时钟比本地慢导致新邮件被误杀
-                        if msg_time < (since_time - timedelta(minutes=5)):
-                            continue
+                # 2. 降維打擊：刪除所有時間與標題過濾！
+                # 臨時信箱是剛生成的，裡面的信 100% 是目標信件，直接放行即可。
 
-                    if not _looks_like_verification(msg):
-                        continue
-
-                # 优先从邮件列表的 content 字段提取验证码（更高效）
+                # 優先從郵件列表的 content 字段提取驗證碼
                 list_content = msg.get("content") or ""
                 if list_content:
                     code = extract_verification_code(list_content)
                     if code:
-                        self._log("info", f"✅ 找到验证码: {code}")
+                        self._log("info", f"✅ 找到驗證碼: {code}")
                         return code
 
-                # 如果列表没有 content，则获取邮件详情
-                self._log("info", f"🔍 正在读取邮件 {idx}/{len(messages)} 详情...")
+                # 如果列表沒有 content，則獲取郵件詳情
+                self._log("info", f"🔍 正在讀取郵件 {idx}/{len(messages)} 詳情...")
                 detail_res = self._request(
                     "GET",
                     f"{self.base_url}/api/emails/{self.email_id}/{msg_id}",
                 )
 
                 if detail_res.status_code != 200:
-                    self._log("warning", f"⚠️ 读取邮件详情失败: HTTP {detail_res.status_code}")
+                    self._log("warning", f"⚠️ 讀取郵件詳情失敗: HTTP {detail_res.status_code}")
                     continue
 
                 detail = detail_res.json() if detail_res.content else {}
 
-                # 处理 {'message': {...}} 格式
+                # 處理 {'message': {...}} 格式
                 if "message" in detail and isinstance(detail["message"], dict):
                     detail = detail["message"]
 
-                # 获取邮件内容
+                # 獲取郵件內容
                 text_content = detail.get("text") or detail.get("textContent") or detail.get("content") or ""
                 html_content = detail.get("html") or detail.get("htmlContent") or ""
 
@@ -311,14 +308,15 @@ class MoemailClient:
                 if isinstance(text_content, list):
                     text_content = "".join(str(item) for item in text_content)
 
-                content = text_content + html_content
-                if content:
+                # 3. 防止粘連，加入換行符
+                content = f"{text_content}\n\n{html_content}"
+                if content.strip():
                     code = extract_verification_code(content)
                     if code:
-                        self._log("info", f"✅ 找到验证码: {code}")
+                        self._log("info", f"✅ 找到驗證碼: {code}")
                         return code
                     else:
-                        self._log("info", f"❌ 邮件 {idx} 中未找到验证码")
+                        self._log("info", f"❌ 郵件 {idx} 中未找到驗證碼")
 
             self._log("warning", "⚠️ 所有邮件中均未找到验证码")
             return None

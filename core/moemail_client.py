@@ -247,11 +247,13 @@ class MoemailClient:
 
             def _looks_like_verification(msg_obj) -> bool:
                 subject = (msg_obj.get("subject") or "").strip()
+                # 修复 1：如果列表 API 没返回 subject，不要直接丢弃，默认放行！
                 if not subject:
-                    return False
+                    return True
+                
                 import re
-                return re.search(r"(验证码|验证|verification|verify|passcode|security\s*code|one[-\s]?time|otp)", subject, re.IGNORECASE) is not None
-
+                # 修复 2：加入对繁体中文 "驗證" 及其他大厂常用词的兼容
+                return re.search(r"(验证码|驗證碼|验证|驗證|verification|verify|passcode|security\s*code|one[-\s]?time|otp)", subject, re.IGNORECASE) is not None
             messages_with_time = [(msg, _parse_message_time(msg)) for msg in messages]
             if any(item[1] for item in messages_with_time):
                 messages_with_time.sort(key=lambda item: item[1] or datetime.min, reverse=True)
@@ -267,7 +269,9 @@ class MoemailClient:
                 if since_time:
                     msg_time = _parse_message_time(msg)
                     if msg_time:
-                        if msg_time < since_time:
+                        from datetime import timedelta
+                        # 修复 3：增加 5 分钟容错，防止服务器时钟比本地慢导致新邮件被误杀
+                        if msg_time < (since_time - timedelta(minutes=5)):
                             continue
 
                     if not _looks_like_verification(msg):
